@@ -6,6 +6,7 @@ import time
 import math
 import sys
 import terminal
+import csv
 
 class Player:
     pref_score = 0
@@ -116,7 +117,20 @@ def get_rating_bounds_of_split(split):
 @click.option('--players', help='the json file containing the players.', required=True)
 @click.option('--boards', default=6, help='number of boards per team.')
 @click.option('--balance', default=0.8, help='proportion of all players that will be full time')
-def make_teams(players, output, boards, balance):
+@click.option('--stats', default='stats.csv')
+def make_teams(players, output, boards, balance, stats):
+    data = [really_make_teams(players, output, boards, balance) for i in range(1000)]
+    print("min score: ", min([d[0] for d in data]))
+    print("max score: ", max([d[0] for d in data]))
+    print("min rating range: ", min([d[1] for d in data]))
+    print("max rating range: ", max([d[1] for d in data]))
+
+    with open(stats, 'w') as stats:
+        stats = csv.writer(stats)
+        stats.writerow(('total_pref_score', 'rating_range'))
+        stats.writerows(data)
+
+def really_make_teams(players, output, boards, balance):
     # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
     with open(players,'r') as infile:
         playerdata = json.load(infile)
@@ -157,12 +171,14 @@ def make_teams(players, output, boards, balance):
     #print num_teams
     #print alts_split
 
-    # snake draft players into initial teams and update player and team attributes
-    for board in players_split[1::2]:
-        board.reverse()
     for n, board in enumerate(players_split):
         for player in board:
             player.board = n
+
+    # randomly shuffle players
+    for board in players_split:
+        random.shuffle(board)
+
     teams = []
     for n in range(num_teams):
         teams.append(Team(boards))
@@ -312,6 +328,15 @@ def make_teams(players, output, boards, balance):
             print()
     elif output == "json":
         print(json.dumps(jsonoutput))
+
+    def total_pref_score(players):
+        return sum([player.pref_score for player in players])
+
+    def team_rating_range(teams):
+        means = [team.getMean() for team in teams]
+        return max(means) - min(means)
+
+    return total_pref_score(players), team_rating_range(teams)
 
 if __name__ == "__main__":
     make_teams()
