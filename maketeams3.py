@@ -119,7 +119,8 @@ def get_rating_bounds_of_split(split):
 @click.option('--balance', default=0.8, help='proportion of all players that will be full time')
 @click.option('--stats', default='stats.csv')
 def make_teams(players, output, boards, balance, stats):
-    data = [really_make_teams(players, output, boards, balance) for i in range(1000)]
+    count = 1
+    data = [really_make_teams(players, output, boards, balance) for i in range(count)]
     print("min score: ", min([d[0] for d in data]))
     print("max score: ", max([d[0] for d in data]))
     print("min rating range: ", min([d[1] for d in data]))
@@ -134,7 +135,7 @@ def really_make_teams(players, output, boards, balance):
     # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
     with open(players,'r') as infile:
         playerdata = json.load(infile)
-    print("This data was read from file.")
+    # print("This data was read from file.")
 
     # put player data into Player objects
     players = []
@@ -142,7 +143,8 @@ def really_make_teams(players, output, boards, balance):
         if player['has_20_games'] and player['in_slack']:
             players.append(Player.player_from_json(player))
         else:
-            print("{0} skipped".format(player['name']))
+            pass
+            # print("{0} skipped".format(player['name']))
     players.sort(key=lambda player: player.rating, reverse=True)
 
     # Split into those that want to be alternates vs those that do not.
@@ -154,7 +156,7 @@ def really_make_teams(players, output, boards, balance):
     team_rating_bounds = get_rating_bounds_of_split(players_split)
 
     num_teams = int(math.ceil((len(players_split[0])*balance)/2.0)*2)
-    print(f"Targetting {num_teams} teams")
+    # print(f"Targetting {num_teams} teams")
 
     # separate latest joining players into alternate lists as required
     for n, board in enumerate(players_split):
@@ -264,7 +266,7 @@ def really_make_teams(players, output, boards, balance):
         swaps.sort()
         if swaps and swaps[-1][0] > 0: # there is a swap to make and it improves the preference score
             swapPlayers(*(swaps[-1][1]))
-            print(swaps[-1])
+            # print(swaps[-1])
             updatePref(players, teams)
             updateSort(players, teams)
             p = 0
@@ -274,60 +276,10 @@ def really_make_teams(players, output, boards, balance):
     for player in players:
         player.setReqMet()
 
-    #WIP for upload format for heltour
-    jsonoutput = []
-    #[{"action":"change-member","team_number":1,"board_number":1,"player":{"name":"lemonworld","is_captain":false,"is_vice_captain":false}}]
-    for t, team in enumerate(teams):
-        for b, board in enumerate(team.boards):
-            pp = {"action":"change-member","team_number":t+1,"board_number":b+1,"player":{"name":board.name,"is_captain":False,"is_vice_captain":False}}
-            jsonoutput.append(pp)
-    for b, board in enumerate(alts_split):
-        print(board)
-        for _, pp in enumerate(board):
-            pp = {"action":"create-alternate","board_number":b+1,"player_name":pp.name}
-            jsonoutput.append(pp)
-
-    if output == "readable":
-        terminal.separator()
-        print(f"Using: {len(players)} players and {len(alternates)} alternates")
-        print(terminal.green(f"Previous Season Alternates"))
-        print(terminal.blue(f"Requested Alternate"))
-        print("TEAMS")
-        terminal.smallheader("Team #")
-        for i in range(boards):
-            n,x = team_rating_bounds[i]
-            terminal.largeheader(f"Board #{i+1} [{n},{x})")
-        print()
-        for team_i in range(num_teams):
-            terminal.smallcol(f"#{team_i+1}")
-            for board_i in range(boards):
-                team = teams[team_i]
-                player = team.boards[board_i]
-                short_name = player.name[:20]
-                player_name = f"{short_name} ({player.rating})"
-                terminal.largecol(player_name, terminal.green if player.previous_season_alt else None)
-            print()
-        print()
-        print("ALTERNATES")
-        terminal.smallheader(" ")
-        for i in range(boards):
-            n,x = alt_rating_bounds[i]
-            terminal.largeheader(f"Board #{i+1} [{n},{x})")
-        print()
-        for player_i in range(max([len(a) for a in alts_split])):
-            terminal.smallcol(" ")
-            for board_i in range(boards):
-                board = alts_split[board_i]
-                player_name = ""
-                if player_i < len(board):
-                    player = board[player_i]
-                    short_name = player.name
-                    short_name = player.name[:20]
-                    player_name = f"{short_name} ({player.rating})"
-                terminal.largecol(player_name, terminal.blue if player.alt else None)
-            print()
-    elif output == "json":
-        print(json.dumps(jsonoutput))
+    # if output == "readable":
+    #     generate_print_output(players, alternates, teams, team_rating_bounds, alt_rating_bounds, alts_split)
+    # elif output == "json":
+    #     print(json.dumps(generate_json_output_object()))
 
     def total_pref_score(players):
         return sum([player.pref_score for player in players])
@@ -337,6 +289,81 @@ def really_make_teams(players, output, boards, balance):
         return max(means) - min(means)
 
     return total_pref_score(players), team_rating_range(teams)
+
+
+def generate_print_output(players, alternates, teams, team_rating_bounds, alt_rating_bounds, alts_split):
+    boards = len(teams[0].boards)
+    num_teams = len(teams)
+    terminal.separator()
+
+    print(f"Using: {len(players)} players and {len(alternates)} alternates")
+    print(terminal.green(f"Previous Season Alternates"))
+    print(terminal.blue(f"Requested Alternate"))
+    print("TEAMS")
+    terminal.smallheader("Team #")
+    for i in range(boards):
+        n,x = team_rating_bounds[i]
+        terminal.largeheader(f"Board #{i+1} [{n},{x})")
+    print()
+    for team_i in range(num_teams):
+        terminal.smallcol(f"#{team_i+1}")
+        for board_i in range(boards):
+            team = teams[team_i]
+            player = team.boards[board_i]
+            short_name = player.name[:20]
+            player_name = f"{short_name} ({player.rating})"
+            terminal.largecol(player_name, terminal.green if player.previous_season_alt else None)
+        print()
+    print()
+    print("ALTERNATES")
+    terminal.smallheader(" ")
+    for i in range(boards):
+        n,x = alt_rating_bounds[i]
+        terminal.largeheader(f"Board #{i+1} [{n},{x})")
+    print()
+    for player_i in range(max([len(a) for a in alts_split])):
+        terminal.smallcol(" ")
+        for board_i in range(boards):
+            board = alts_split[board_i]
+            player_name = ""
+            if player_i < len(board):
+                player = board[player_i]
+                short_name = player.name
+                short_name = player.name[:20]
+                player_name = f"{short_name} ({player.rating})"
+            terminal.largecol(player_name, terminal.blue if player.alt else None)
+        print()
+
+
+# WIP for upload format for heltour
+def generate_json_output_object(teams, alts_split):
+    jsonoutput = []
+    # [{"action":"change-member",
+    #   "team_number": 1,
+    #   "board_number": 1,
+    #   "player": {"name": "lemonworld",
+    #              "is_captain": False,
+    #              "is_vice_captain": False}}]
+
+    for t, team in enumerate(teams):
+        for b, board in enumerate(team.boards):
+            pp = {"action": "change-member",
+                  "team_number": t+1,
+                  "board_number": b+1,
+                  "player": {"name": board.name,
+                             "is_captain": False,
+                             "is_vice_captain": False}}
+            jsonoutput.append(pp)
+
+    for b, board in enumerate(alts_split):
+        print(board)
+        for _, pp in enumerate(board):
+            pp = {"action": "create-alternate",
+                  "board_number": b+1,
+                  "player_name": pp.name}
+            jsonoutput.append(pp)
+
+    return jsonoutput
 
 if __name__ == "__main__":
     make_teams()
