@@ -119,7 +119,7 @@ def get_rating_bounds_of_split(split):
 @click.option('--balance', default=0.8, help='proportion of all players that will be full time')
 @click.option('--stats', default='stats.csv')
 def make_teams(players, output, boards, balance, stats):
-    count = 1
+    count = 100
     data = [really_make_teams(players, output, boards, balance) for i in range(count)]
     print("min score: ", min([d[0] for d in data]))
     print("max score: ", max([d[0] for d in data]))
@@ -128,7 +128,7 @@ def make_teams(players, output, boards, balance, stats):
 
     with open(stats, 'w') as stats:
         stats = csv.writer(stats)
-        stats.writerow(('total_pref_score', 'rating_range'))
+        stats.writerow(('initial_total_pref_score', 'initial_rating_range', 'end_total_pref_score', 'end_rating_range'))
         stats.writerows(data)
 
 def really_make_teams(players, output, boards, balance):
@@ -169,6 +169,7 @@ def really_make_teams(players, output, boards, balance):
     alt_rating_bounds = get_rating_bounds_of_split(alts_split)
 
     players = sum(players_split,[])
+
     #print len(players)
     #print num_teams
     #print alts_split
@@ -242,13 +243,24 @@ def really_make_teams(players, output, boards, balance):
     # if no improving swaps are available, go to the next player
     # if end of the list reached with no swaps made: stop
 
+    # get starting stuff
+    def total_pref_score(players):
+        return sum([player.pref_score for player in players])
+
+    def team_rating_range(teams):
+        means = [team.getMean() for team in teams]
+        return max(means) - min(means)
+    initial_pref_score, initial_rating_range = total_pref_score(players), team_rating_range(teams)
+
     p = 0
-    while p<len(players):
+    while p < len(players):
         player = players[p] #least happy player
         swaps = []
         for friend in player.friends:
-            #test both direction swaps for each friend and whichever is better, add the swap ID and score to temp friends list
-            if friend.board != player.board and friend.team != player.team: #board check is redundant due to earlier removal of same board requests
+            # test both direction swaps for each friend and whichever is better, add the swap ID and score to temp
+            # friends list
+            # board check is redundant due to earlier removal of same board requests
+            if friend.board != player.board and friend.team != player.team:
                 #test swap friend to player team (swap1)
                 swap1_ID = (friend.team, friend, player.team, player.team.getPlayer(friend.board), friend.board)
                 swap1_score = testSwap(*swap1_ID)
@@ -281,14 +293,8 @@ def really_make_teams(players, output, boards, balance):
     # elif output == "json":
     #     print(json.dumps(generate_json_output_object()))
 
-    def total_pref_score(players):
-        return sum([player.pref_score for player in players])
 
-    def team_rating_range(teams):
-        means = [team.getMean() for team in teams]
-        return max(means) - min(means)
-
-    return total_pref_score(players), team_rating_range(teams)
+    return initial_pref_score, initial_rating_range, total_pref_score(players), team_rating_range(teams)
 
 
 def generate_print_output(players, alternates, teams, team_rating_bounds, alt_rating_bounds, alts_split):
