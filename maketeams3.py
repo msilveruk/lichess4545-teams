@@ -205,7 +205,7 @@ def make_league(playerdata, boards, balance):
     def convert_name_list(string_of_names, players):
         pattern = r"([^-_a-zA-Z0-9]|^){0}([^-_a-zA-Z0-9]|$)"
         return [player for player in players
-                if re.search(pattern.format(player.name, 'i'), string_of_names)]
+                if re.search(pattern.format(player.name, re.I), string_of_names)]
 
     for player in players:
         filtered_players = [p for p in players if p.board != player.board]
