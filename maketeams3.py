@@ -155,16 +155,25 @@ def run(players, output, boards, balance, count):
 
     leagues = [make_league(player_data, boards, balance) for _ in range(count)]
 
-    happiest_league = max(leagues, key=lambda l: total_happiness(l['teams']))
-    generate_print_output(happiest_league)
+    max_happiness = max([total_happiness(l['teams']) for l in leagues])
+    happy_leagues = [l for l in leagues if total_happiness(l['teams']) == max_happiness]
+    print(f"{len(happy_leagues)} leagues of happiness {max_happiness} found")
 
-    happiest_league['teams'] = reduce_variance(happiest_league['teams'])
+    for i, league in enumerate(happy_leagues):
+        print(f"Happy League {i}")
+        generate_print_output(league)
 
-    if output == "readable":
-        generate_print_output(happiest_league)
+    for league in happy_leagues:
+        league['teams'] = reduce_variance(league['teams'])
 
-    elif output == "json":
-        print(json.dumps(generate_json_output_object()))
+    min_range_league = min(happy_leagues, key=lambda l: team_rating_range(l['teams']))
+    print("Minimum rating range happy league")
+    generate_print_output(min_range_league)
+
+    # if output == "readable":
+    #
+    # elif output == "json":
+    #     print(json.dumps(generate_json_output_object()))
 
 
 def get_player_data(players):
