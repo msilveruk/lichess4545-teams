@@ -27,6 +27,10 @@ class Player:
 
     @classmethod
     def player_from_json(cls, player):
+        if 'previous_season_alternate' in player:
+            prev_alt = player['previous_season_alternate'] == 'alternate'
+        else:
+            prev_alt = False
         return cls(
             player['name'],
             player['rating'],
@@ -34,7 +38,7 @@ class Player:
             player['avoid'],
             player['date_created'],
             player['prefers_alt'],
-            player['previous_season_alternate'] == 'alternate'
+            prev_alt
         )
 
     def __repr__(self):
@@ -108,6 +112,7 @@ def split_into_equal_groups_by_rating(players, group_number):
         last += avg
     return players_split
 
+
 def get_rating_bounds_of_split(split):
     min_ratings = [min([p.rating for p in board]) for board in split]
     max_ratings = [max([p.rating for p in board]) for board in split]
@@ -115,28 +120,40 @@ def get_rating_bounds_of_split(split):
     max_ratings[0] = 5000
     return list(zip(min_ratings, max_ratings))
 
+
 def total_happiness(teams):
     return sum([team.team_pref_score for team in teams])
+
 
 def team_rating_range(teams):
     means = [team.getMean() for team in teams]
     return max(means) - min(means)
 
+
+def squared_diff(a, b):
+    return (a - b)**2
+
+
+def variance(mean, xs):
+    return sum([squared_diff(mean, x) for x in xs]) / len(xs)
+
+
 def team_rating_variance(teams, league_mean=None):
     if not league_mean:
         league_mean = sum([team.getMean() for team in teams]) / len(teams)
-    return sum([(team.getMean() - league_mean)**2 for team in teams]) / len(teams)
+    return variance(league_mean, [team.getMean() for team in teams])
+
 
 @click.command()
 @click.option('--output', default="readable", type=click.Choice(['json', 'readable']))
 @click.option('--players', help='the json file containing the players.', required=True)
 @click.option('--boards', default=6, help='number of boards per team.')
 @click.option('--balance', default=0.8, help='proportion of all players that will be full time')
-@click.option('--count', default='10')
+@click.option('--count', default=100, help='Number of iterations to fun happiness optimizer')
 def run(players, output, boards, balance, count):
     player_data = get_player_data(players)
 
-    leagues = [make_league(player_data, boards, balance) for _ in range(int(count))]
+    leagues = [make_league(player_data, boards, balance) for _ in range(count)]
 
     happiest_league = max(leagues, key=lambda l: total_happiness(l['teams']))
     generate_print_output(happiest_league)
@@ -149,8 +166,10 @@ def run(players, output, boards, balance, count):
     elif output == "json":
         print(json.dumps(generate_json_output_object()))
 
+
 def get_player_data(players):
-    # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created, prefers_alt, friends, avoid, has_20_games.
+    # input file is JSON data with the following keys: rating, name, in_slack, account_status, date_created,
+    # prefers_alt, friends, avoid, has_20_games.
     with open(players,'r') as infile:
         playerdata = json.load(infile)
     return playerdata
@@ -205,13 +224,12 @@ def make_league(playerdata, boards, balance):
     def convert_name_list(string_of_names, players):
         pattern = r"([^-_a-zA-Z0-9]|^){0}([^-_a-zA-Z0-9]|$)"
         return [player for player in players
-                if re.search(pattern.format(player.name, re.I), string_of_names)]
+                if re.search(pattern.format(player.name), string_of_names, flags=re.I)]
 
     for player in players:
         filtered_players = [p for p in players if p.board != player.board]
         player.friends = convert_name_list(player.friends, filtered_players)
         player.avoid = convert_name_list(player.avoid, filtered_players)
-
 
     # randomly shuffle players
     for board in players_split:
@@ -300,8 +318,8 @@ def intersection(lst1, lst2):
     return set(lst1).intersection(set(lst2))
 
 
+# Does this swap have a neutral effect on happiness
 def is_neutral_swap(swap):
-
     def count_on_team(attr, player, team):
         n = len(intersection(getattr(player, attr), team.boards))
         n += len([p for p in team.boards if player in getattr(p, attr)])
@@ -321,25 +339,26 @@ def is_neutral_swap(swap):
 
 
 def get_swaps(teams):
-    boards = [[team.boards[i] for team in teams] for i in range(6)]
+    num_boards = len(teams[0].boards)
+    boards = [[team.boards[i] for team in teams] for i in range(num_boards)]
     swaps = [[swap for swap in combinations(board, 2) if is_neutral_swap(swap)] for board in boards]
     return [swap for board_swaps in swaps for swap in board_swaps]
 
 
 def rating_variance_improvement(league_mean, n_boards, swap):
-    def score(l, a, b):
-        return (l - a)**2 + (l - b)**2
+    def score(a, b):
+        return variance(league_mean, [a, b])
 
     pa, pb = swap
     a_mean = pa.team.getMean()
     b_mean = pb.team.getMean()
-    initial_score = score(league_mean, a_mean, b_mean)
+    initial_score = score(a_mean, b_mean)
 
     # calculating change in mean if we swapped the players.
     rating_diff = pb.rating - pa.rating
     a_mean = a_mean + rating_diff/n_boards
     b_mean = b_mean - rating_diff/n_boards
-    new_score = score(league_mean, a_mean, b_mean)
+    new_score = score(a_mean, b_mean)
 
     # lower is better
     return new_score - initial_score
@@ -360,50 +379,58 @@ def perform_swap(swap):
 
 
 def update_swaps(swaps, swap_performed, teams):
-    board = swap_performed[0].board
-
-    # remove all swaps involving the players just swapped.
+    pa, pb = swap_performed
+    affected_players = pa.team.boards + pb.team.boards
+    # remove all swaps involving players affected by the swap.
     swaps = [swap for swap in swaps
-             if not (swap[0] in swap_performed or swap[1] in swap_performed)]
-    players_on_board = [team.boards[board] for team in teams
-                        if not team.boards[board] in swap_performed]
+             if not (swap[0] in affected_players or swap[1] in affected_players)]
 
-    # find new neutral involving the players just swapped.
-    for i in range(2):
-        swaps.extend([(swap_performed[i], p) for p in players_on_board
-                      if is_neutral_swap((swap_performed[i], p))])
+    # find new neutral swaps involving the players affected by swap.
+    for player in affected_players:
+        board = player.board
+        players_on_board = [team.boards[board] for team in teams
+                            if not team.boards[board] in affected_players]
+        swaps.extend([(player, p) for p in players_on_board
+                      if is_neutral_swap((player, p))])
+
+    swaps.extend([swap for swap in zip(pa.team.boards, pb.team.boards)
+                  if is_neutral_swap(swap)])
 
     return swaps
 
 
 def reduce_variance(teams):
+    # players = sum([team.boards for team in teams], [])
 
-    players = sum([team.boards for team in teams], [])
     league_mean = sum([team.getMean() for team in teams]) / len(teams)
-
     n_boards = len(teams[0].boards)
-    eval_fun = partial(rating_variance_improvement, league_mean, n_boards)
 
     swaps = get_swaps(teams)
+
+    eval_fun = partial(rating_variance_improvement, league_mean, n_boards)
     best_swap, swap_value = get_best_swap(swaps, eval_fun)
 
-    # infinite loop posibillity here?
+    # infinite loop possibility here?
     i = 0
-    while swap_value <= 0:
-        variance = team_rating_variance(teams, league_mean)
-        means = [team.getMean() for team in teams]
-        updatePref(players, teams)
-        score = total_happiness(teams)
+    max_iterations = 200
+    epsilon = 0.0000001
+    while swap_value <= -epsilon and i < max_iterations:
+        # variance = team_rating_variance(teams, league_mean)
+        # updatePref(players, teams)
+        # score = total_happiness(teams)
         # print()
         # print("i: ", i)
         # print("variance: ", variance)
         # print("score: ", score)
         # print("swap_value: ", swap_value)
+        # print("best_swap: ", best_swap)
         i += 1
         perform_swap(best_swap)
         swaps = update_swaps(swaps, best_swap, teams)
         best_swap, swap_value = get_best_swap(swaps, eval_fun)
 
+    # means = [team.getMean() for team in teams]
+    # print("means: ", sorted(means))
     return teams
 
 
@@ -428,6 +455,7 @@ def generate_print_output(league):
     for i in range(boards):
         n,x = team_rating_bounds[i]
         terminal.largeheader(f"Board #{i+1} [{n},{x})")
+    terminal.largeheader("Mean rating")
     print()
     for team_i in range(num_teams):
         terminal.smallcol(f"#{team_i+1}")
@@ -437,6 +465,7 @@ def generate_print_output(league):
             short_name = player.name[:20]
             player_name = f"{short_name} ({player.rating})"
             terminal.largecol(player_name, terminal.green if player.previous_season_alt else None)
+        terminal.largecol(team.getMean())
         print()
     print()
     print("ALTERNATES")
