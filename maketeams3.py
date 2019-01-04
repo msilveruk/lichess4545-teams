@@ -474,7 +474,7 @@ def generate_print_output(league):
             short_name = player.name[:20]
             player_name = f"{short_name} ({player.rating})"
             terminal.largecol(player_name, terminal.green if player.previous_season_alt else None)
-        terminal.largecol(team.getMean())
+        terminal.largecol("{0:.2f}".format(team.getMean()))
         print()
     print()
     print("ALTERNATES")
