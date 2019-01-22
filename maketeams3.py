@@ -338,12 +338,18 @@ def is_neutral_swap(swap):
     count_avoids_on_team = partial(count_on_team, 'avoid')
 
     pa, pb = swap
-    if count_friends_on_team(pa, pa.team) != count_friends_on_team(pa, pb.team)\
-            or count_friends_on_team(pb, pb.team) != count_friends_on_team(pb, pa.team)\
-            or count_avoids_on_team(pa, pa.team) != count_avoids_on_team(pa, pb.team)\
-            or count_avoids_on_team(pb, pb.team) != count_avoids_on_team(pb, pa.team):
-        return False
+    pre_swap_score = count_friends_on_team(pa, pa.team) \
+                     + count_friends_on_team(pb, pb.team) \
+                     - count_avoids_on_team(pa, pa.team) \
+                     - count_avoids_on_team(pb, pb.team)
 
+    post_swap_score = count_friends_on_team(pa, pb.team) \
+                     + count_friends_on_team(pb, pa.team) \
+                     - count_avoids_on_team(pa, pb.team) \
+                     - count_avoids_on_team(pb, pa.team)
+
+    if pre_swap_score != post_swap_score:
+        return False
     return True
 
 
