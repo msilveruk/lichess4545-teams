@@ -145,7 +145,7 @@ def team_rating_variance(teams, league_mean=None):
 @click.option('--players', help='the json file containing the players.', required=True)
 @click.option('--boards', default=6, help='number of boards per team.')
 @click.option('--balance', default=0.8, help='proportion of all players that will be full time')
-@click.option('--count', default=100, help='Number of iterations to fun happiness optimizer')
+@click.option('--count', default=100, help='Number of iterations to run happiness optimizer')
 def run(players, output, boards, balance, count):
     player_data = get_player_data(players)
 
