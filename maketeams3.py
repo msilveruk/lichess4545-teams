@@ -27,10 +27,6 @@ class Player:
 
     @classmethod
     def player_from_json(cls, player):
-        if 'previous_season_alternate' in player:
-            prev_alt = player['previous_season_alternate'] == 'alternate'
-        else:
-            prev_alt = False
         return cls(
             player['name'],
             player['rating'],
@@ -38,7 +34,7 @@ class Player:
             player['avoid'],
             player['date_created'],
             player['prefers_alt'],
-            prev_alt
+            player.get('previous_season_alternate') == 'alternate'
         )
 
     def __repr__(self):
