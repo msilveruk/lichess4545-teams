@@ -140,6 +140,10 @@ def team_rating_variance(teams, league_mean=None):
     return variance(league_mean, [team.getMean() for team in teams])
 
 
+def flatten(lst):
+    return [item for sub_lst in lst for item in sub_lst]
+
+
 @click.command()
 @click.option('--output', default="readable", type=click.Choice(['json', 'readable']))
 @click.option('--players', help='the json file containing the players.', required=True)
@@ -216,7 +220,7 @@ def make_league(playerdata, boards, balance):
     alts_split = split_into_equal_groups_by_rating(alternates, boards)
     alt_rating_bounds = get_rating_bounds_of_split(alts_split)
 
-    players = sum(players_split,[])
+    players = flatten(players_split)
 
     #print len(players)
     #print num_teams
@@ -347,7 +351,7 @@ def get_swaps(teams):
     num_boards = len(teams[0].boards)
     boards = [[team.boards[i] for team in teams] for i in range(num_boards)]
     swaps = [[swap for swap in combinations(board, 2) if is_neutral_swap(swap)] for board in boards]
-    return [swap for board_swaps in swaps for swap in board_swaps]
+    return flatten(swaps)
 
 
 def rating_variance_improvement(league_mean, n_boards, swap):
@@ -405,7 +409,7 @@ def update_swaps(swaps, swap_performed, teams):
 
 
 def reduce_variance(teams):
-    # players = sum([team.boards for team in teams], [])
+    # players = flatten([team.boards for team in teams])
 
     league_mean = sum([team.getMean() for team in teams]) / len(teams)
     n_boards = len(teams[0].boards)
