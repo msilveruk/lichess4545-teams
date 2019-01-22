@@ -392,7 +392,7 @@ def update_swaps(swaps, swap_performed, teams):
     affected_players = pa.team.boards + pb.team.boards
     # remove all swaps involving players affected by the swap.
     swaps = [swap for swap in swaps
-             if not (swap[0] in affected_players or swap[1] in affected_players)]
+             if not intersection(swap, affected_players)]
 
     # find new neutral swaps involving the players affected by swap.
     for player in affected_players:
